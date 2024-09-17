@@ -3,6 +3,7 @@
 namespace App\Controller;
 
 use App\Entity\Empleados;
+use App\Entity\SolicitudPagos;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
@@ -10,12 +11,17 @@ use Symfony\Component\HttpFoundation\Response;
 
 class SeguridadController extends AbstractController
 {
-    public function index(Request $request)
+    public function index(Request $request, EntityManagerInterface $entityManager)
     {
         $session = $request->getSession();
         if ($session->has('idUsuario')) {
-
-            return $this->render('Administrativo/administrativo-home-page.html.twig');
+            $idEmpleado = $entityManager->getRepository(Empleados::class)
+                ->findOneBy(['identificador' => $session->get('idUsuario')]);
+            $solicitudes = $entityManager->getRepository(SolicitudPagos::class)
+                ->findBy(['cveEmp' => $idEmpleado]);
+            return $this->render('Administrativo/administrativo-home-page.html.twig',
+                ['solicitudes' => $solicitudes]
+            );
         } else {
             return $this->redirectToRoute('sigpac_login');
         }
