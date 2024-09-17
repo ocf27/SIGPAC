@@ -2,7 +2,11 @@
 
 namespace App\Controller;
 
+use App\Entity\Alumnos;
+use App\Entity\CatalogoRoles;
 use App\Entity\Empleados;
+use App\Entity\Matricula;
+use App\Entity\Pagos;
 use App\Entity\SolicitudPagos;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -15,13 +19,49 @@ class SeguridadController extends AbstractController
     {
         $session = $request->getSession();
         if ($session->has('idUsuario')) {
-            $idEmpleado = $entityManager->getRepository(Empleados::class)
-                ->findOneBy(['identificador' => $session->get('idUsuario')]);
-            $solicitudes = $entityManager->getRepository(SolicitudPagos::class)
-                ->findBy(['cveEmp' => $idEmpleado]);
-            return $this->render('Administrativo/administrativo-home-page.html.twig',
-                ['solicitudes' => $solicitudes]
-            );
+            $render = "";
+            switch ($session->get('rol')) {
+                case 1:
+                    $idEmpleado = $entityManager->getRepository(Empleados::class)
+                        ->findOneBy(['identificador' => $session->get('idUsuario')]);
+                    $solicitudes = $entityManager->getRepository(SolicitudPagos::class)
+                        ->findBy(['cveEmp' => $idEmpleado]);
+                    $render = $this->render('Administrativo/administrativo-home-page.html.twig',
+                        ['solicitudes' => $solicitudes]
+                    );
+                    break;
+                case 6:
+                    $alumno = $entityManager->getRepository(Alumnos::class)
+                        ->findOneBy(['curp' => $session->get('idUsuario')]);
+                    $solicitudes = $entityManager->getRepository(SolicitudPagos::class)
+                        ->findBy(['cveAlu' => $alumno]);
+                    $matricula = $entityManager->getRepository(Matricula::class)
+                        ->findOneBy(['cveAlu' => $alumno]);
+                    $planPagos = $entityManager->getRepository(Pagos::class)
+                        ->findBy(['cveMat' => $matricula]);
+                    $dql = "SELECT p "
+                        . "FROM "
+                        . "App\Entity\Pagos p "
+                        . "WHERE "
+                        . "p.idPago NOT IN( SELECT IDENTITY(sp.cvePag) FROM App\Entity\SolicitudPagos sp WHERE sp.cveAlu = " . $alumno->getIdAlu() . ") "
+                        . "AND "
+                        . "p.cveMat = " . $matricula->getIdMat();
+                    $query = $entityManager->createQuery($dql);
+                    $pagosPendientes = $query->getResult();
+
+                    $render = $this->render('Alumno/alumno-home-page.html.twig',
+                        [
+                            'solicitudes' => $solicitudes,
+                            'planPagos' => $planPagos,
+                            'pagosPendientes' => $pagosPendientes
+                        ]
+                    );
+                    break;
+                default:
+                    break;
+            }
+
+            return $render;
         } else {
             return $this->redirectToRoute('sigpac_login');
         }
@@ -54,7 +94,23 @@ class SeguridadController extends AbstractController
                         $bandera = false;
                     }
                 } else {
-                    $bandera = false;
+                    /*
+                     * BUSCAR COMO ALUMNO
+                     */
+                    $alumno = $entityManager->getRepository(Alumnos::class)
+                        ->findOneBy(['username' => $username, 'password' => $password]);
+                    if ($alumno != null) {
+                        $bandera = true;
+                        $session->set('idUsuario', $alumno->getCurp());
+                        $session->set('rol', 6);
+                        $session->set('desRol', 'ALUMNO');
+                        $session->set('nombreUsuario', $alumno->getNomAlu());
+                        $session->set('paUsuario', $alumno->getPriApe());
+                        $session->set('saUsuario', $alumno->getSegApe());
+                    } else {
+                        $bandera = false;
+                    }
+
                 }
 
                 $response = new Response($bandera, 200);
